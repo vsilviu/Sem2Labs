@@ -22,24 +22,30 @@ class Util {
         String line = readLine(in, "Expecting number of terminals");
         int nterm = toInt(line, "number of terminals");
         for(int i = 0; i < nterm; i++) {
+            System.out.println("Dati terminal:");
             grammar.terminals.add(readLine(in, "Expecting a terminal"));
         }
         if(grammar.terminals.size() != nterm) throw new Error("Duplicate terminals");
 
+        System.out.println("Nr de neterminale:");
         line = readLine(in, "Expecting number of non-terminals");
         int nnonterm = toInt(line, "number of non-terminals");
         for(int i = 0; i < nnonterm; i++) {
+            System.out.println("Dati neterminal:");
             grammar.nonterminals.add(readLine(in, "Expecting a non-terminal"));
         }
         if(grammar.nonterminals.size() != nnonterm) throw new Error("Duplicate non-terminal");
 
+        System.out.println("Dati simbolul de start:");
         grammar.start = readLine(in, "Expecting start symbol");
         if(!grammar.nonterminals.contains(grammar.start)) throw new Error(
                 "Start symbol "+grammar.start+" was not declared as a non-terminal.");
 
+        System.out.println("Dati nr de productii:");
         line = readLine(in, "Expecting number of productions");
         int nprods = toInt(line, "number of productions");
         for(int i = 0; i < nprods; i++) {
+            System.out.println("Dati productia:");
             grammar.productions.add(readProduction(readLine(in, "Expecting production"), grammar));
         }
         if(grammar.productions.size() != nprods) throw new Error("Duplicate productions");
@@ -50,7 +56,7 @@ class Util {
         if(!s.hasNext()) throw new Error("Empty line instead of a production");
         String lhs = s.next();
         if(!grammar.isNonTerminal(lhs)) throw new Error("Symbol "+lhs+" was not declared as a non-terminal, but appears on the LHS of production "+line);
-        List<String> rhs = new ArrayList<String>();
+        List<String> rhs = new ArrayList<>();
         while(s.hasNext()) {
             String sym = s.next();
             if(!grammar.isNonTerminal(sym) && !grammar.isTerminal(sym)) {
@@ -59,7 +65,7 @@ class Util {
             rhs.add(sym);
         }
         return new Production(lhs,
-                (String[]) rhs.toArray(new String[rhs.size()]));
+                rhs.toArray(new String[rhs.size()]));
     }
     static String checkIndent(String line, int indent) {
         for(int i = 0; i < indent; i++) {
