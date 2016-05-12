@@ -2,46 +2,29 @@ package com.tc.tema2;
 
 import java.util.*;
 
-/**
- * The main Jslr class.
- */
 public class Jslr {
-    /**
-     * The context-free grammar.
-     */
+
     Grammar grammar;
-    /**
-     * A map from each non-terminal to the productions that expand it.
-     */
-    Map<String, List<Production>> lhsToRules = new HashMap<String, List<Production>>();
-
-    /**
-     * The NULLABLE, FIRST, and FOLLOW sets. See Appel, pp. 47-49 \
-     * */
-    Set<String> nullable = new HashSet<String>();
-    Map<String, Set<String>> first = new HashMap<String, Set<String>>();
-    Map<String, Set<String>> follow = new HashMap<String, Set<String>>();
-
-    /**
-     * The computed parse table.
-     */
-    Map<Pair<Set<Item>, String>, Action> table =
-            new HashMap<Pair<Set<Item>, String>, Action>();
+    Map<String, List<Production>> lhsToRules = new HashMap<>();
+    Map<String, Set<String>> follow = new HashMap<>();
+    Map<Pair<Set<Item>, String>, Action> table = new HashMap<>();
+    Map<PairIndex, Action> indexTable = new LinkedHashMap<>();
     Set<Item> initialState;
+    ArrayList<Production> productionArrayList = new ArrayList<>();
 
     public Jslr(Grammar grammar) {
         this.grammar = grammar;
+        this.productionArrayList.addAll(grammar.productions);
         for (Production p : grammar.productions) {
             List<Production> mapRules = lhsToRules.get(p.lhs);
             if (mapRules == null) {
-                mapRules = new ArrayList<Production>();
+                mapRules = new ArrayList<>();
                 lhsToRules.put(p.lhs, mapRules);
             }
             mapRules.add(p);
         }
     }
 
-    //calculeaza first follow ptr productia data
     void repeater(Production p, int rhsIndex) {
         try {
 
@@ -102,7 +85,7 @@ public class Jslr {
      */
     public Set<Item> closure(Set<Item> i) {
         while (true) {
-            Set<Item> oldI = new HashSet<Item>(i);
+            Set<Item> oldI = new HashSet<>(i);
             for (Item item : oldI) {
                 if (!item.hasNextSym()) continue;
                 String x = item.nextSym();
@@ -120,7 +103,7 @@ public class Jslr {
      * of Appel, p. 60
      */
     public Set<Item> goto_(Set<Item> i, String x) {
-        Set<Item> j = new HashSet<Item>();
+        Set<Item> j = new LinkedHashSet<Item>();
         for (Item item : i) {
             if (!item.hasNextSym()) continue;
             if (!item.nextSym().equals(x)) continue;
@@ -134,7 +117,7 @@ public class Jslr {
      * symbol sym. Report a conflict if the table already contiains
      * an action for the same state and symbol.
      */
-    private boolean addAction(Set<Item> state, String sym, Action a) {
+    private boolean addAction(Set<Item> state, String sym, Action a, Integer i) {
         boolean ret = false;
         Pair<Set<Item>, String> p = new Pair<Set<Item>, String>(state, sym);
         Action old = table.get(p);
@@ -146,74 +129,26 @@ public class Jslr {
         }
         if (old == null || !old.equals(a)) ret = true;
         table.put(p, a);
-        return ret;
-    }
-
-    /**
-     * Return true if all the symbols in l are in the set nullable.
-     */
-    private boolean allNullable(String[] l) {
-        return allNullable(l, 0, l.length);
-    }
-
-    /**
-     * Return true if the symbols start..end in l are in the set nullable.
-     */
-    private boolean allNullable(String[] l, int start, int end) {
-        boolean ret = true;
-        for (int i = start; i < end; i++) {
-            if (!nullable.contains(l[i])) ret = false;
-        }
-        return ret;
-    }
-
-    /**
-     * Computes NULLABLE, FIRST, and FOLLOW sets using the algorithm
-     * of Appel, p. 49
-     */
-    public void computeFirstFollowNullable() {
-        for (String z : grammar.syms()) {
-            first.put(z, new HashSet<String>());
-            if (grammar.isTerminal(z)) first.get(z).add(z);
-            follow.put(z, new HashSet<String>());
-        }
-        boolean change;
-        do {
-            change = false;
-            for (Production rule : grammar.productions) {
-                if (allNullable(rule.rhs)) {
-                    if (nullable.add(rule.lhs)) change = true;
-                }
-                int k = rule.rhs.length;
-                for (int i = 0; i < k; i++) {
-                    if (allNullable(rule.rhs, 0, i)) {
-                        if (first.get(rule.lhs).addAll(
-                                first.get(rule.rhs[i])))
-                            change = true;
-                    }
-                    if (allNullable(rule.rhs, i + 1, k)) {
-                        if (follow.get(rule.rhs[i]).addAll(
-                                follow.get(rule.lhs)))
-                            change = true;
-                    }
-                    for (int j = i + 1; j < k; j++) {
-                        if (allNullable(rule.rhs, i + 1, j)) {
-                            if (follow.get(rule.rhs[i]).addAll(
-                                    first.get(rule.rhs[j])))
-                                change = true;
-                        }
-                    }
-                }
+        //find occurences of this key first.
+        PairIndex pairIndex = new PairIndex(p, i);
+        boolean found = false;
+        for (PairIndex pairIndex1 : indexTable.keySet()) {
+            if (pairIndex1.getPair().equals(p) && pairIndex1.getPosition().equals(i)) {
+                found = true;
             }
-        } while (change);
+        }
+        if (!found) {
+            indexTable.put(pairIndex, a);
+        }
+        return ret;
     }
 
     public void addTheDollars() {
-        for(String key : follow.keySet()) {
-            if(grammar.isNonTerminal(key)) {
+        for (String key : follow.keySet()) {
+            if (grammar.isNonTerminal(key)) {
                 HashSet oldSet = (HashSet) follow.get(key);
                 oldSet.add("$");
-                follow.put(key,oldSet);
+                follow.put(key, oldSet);
             }
         }
     }
@@ -232,28 +167,44 @@ public class Jslr {
             startRuleSet.add(new Item(r, 0));
         }
         initialState = closure(startRuleSet);
-        Set<Set<Item>> t = new HashSet<Set<Item>>();
-        t.add(initialState);
+        if (initialState.size() == grammar.productions.size()) {
+            initialState = new LinkedHashSet<>();
+            for (Production p : grammar.productions) {
+                initialState.add(new Item(p, 0));
+            }
+        }
+        //reorder initial state by the grammar.production order
+        Map<Set<Item>, Integer> t = new LinkedHashMap<>();
+        t.put(initialState, 0);
         boolean change;
+        int index1 = 1;
+        int index2;
         // compute goto actions
         do {
             change = false;
-            for (Set<Item> i : new HashSet<Set<Item>>(t)) {
+            for (Set<Item> i : new LinkedHashSet<Set<Item>>(t.keySet())) {
                 for (Item item : i) {
                     if (!item.hasNextSym()) continue;
                     String x = item.nextSym();
                     Set<Item> j = goto_(i, x);
-                    if (t.add(j)) change = true;
-                    if (addAction(i, x, new ShiftAction(j))) change = true;
+                    if (!t.keySet().contains(j)) {
+                        change = true;
+                        t.put(j, index1++);
+                    }
+                    index2 = t.get(i); //j e element in t
+                    if (addAction(i, x, new ShiftAction(j, t.get(j)), index2)) change = true;
                 }
             }
         } while (change);
         // compute reduce actions
-        for (Set<Item> i : t) {
+        for (Set<Item> i : t.keySet()) {
             for (Item item : i) {
                 if (item.hasNextSym()) continue;
                 for (String x : follow.get(item.rule.lhs)) {
-                    addAction(i, x, new ReduceAction(item.rule));
+                    List<Production> arrayList = new ArrayList<>();
+                    arrayList.addAll(grammar.productions);
+                    index2 = t.get(i);
+                    addAction(i, x, new ReduceAction(item.rule, arrayList.indexOf(item.rule) + 1), index2);
                 }
             }
         }
@@ -273,50 +224,122 @@ public class Jslr {
         return ret.toString();
     }
 
-    /**
-     * Produce output according to the output specification.
-     */
-    public void generateOutput() {
-        Map<Production, Integer> ruleMap = new HashMap<Production, Integer>();
-        int i = 0;
-        for (Production r : grammar.productions) {
-            ruleMap.put(r, i++);
+    public void showTableOutput() {
+        for (Pair pair : table.keySet()) {
+            System.out.println(pair.toString() + " ---------------goes to------------------- " + table.get(pair));
         }
-        Map<Set<Item>, Integer> stateMap = new HashMap<Set<Item>, Integer>();
-        i = 0;
-        stateMap.put(initialState, i++);
-        for (Action a : table.values()) {
-            if (!(a instanceof ShiftAction)) continue;
-            Set<Item> state = ((ShiftAction) a).nextState;
-            if (!stateMap.containsKey(state)) {
-                stateMap.put(state, i++);
+//        System.out.println(table.toString());
+    }
+
+    public void showIndexTableOutput() {
+        for (PairIndex pair : indexTable.keySet()) {
+            System.out.println(pair.toString() + " ----> " + indexTable.get(pair));
+        }
+//        System.out.println(table.toString());
+    }
+
+    public String parseInputWord(String word) {
+
+        String stack = "0";
+        String reductionStack = "";
+        Character crtChar;
+        Integer lastPos = Integer.parseInt(String.valueOf(stack.charAt(stack.length() - 1)));
+        Action action = null;
+        boolean change = false;
+
+        while (!word.equals("") && !change) {
+            crtChar = word.charAt(0);
+            if(!crtChar.toString().equals("$")) {
+                lastPos = Integer.parseInt(String.valueOf(stack.charAt(stack.length() - 1)));
+                for (PairIndex pairIndex : indexTable.keySet()) {
+                    if (pairIndex.getPosition().equals(lastPos) && pairIndex.getPair().getO2().equals(crtChar.toString())) {
+                        action = indexTable.get(pairIndex);
+                        break;
+                    }
+                }
+                if (action != null)
+                    if (action instanceof ShiftAction) {
+                        ShiftAction shiftAction = (ShiftAction) action;
+                        stack = stack + crtChar.toString() + shiftAction.getPos();
+                        word = word.substring(1);
+//                        System.out.println("stack: " + stack);
+//                        System.out.println("word:" + word);
+                    } else if (action instanceof ReduceAction) {
+                        int offset = ((ReduceAction) action).getRule().rhs.length;
+                        stack = stack.substring(0, stack.length() - 2*offset);
+                        ReduceAction reduceAction = (ReduceAction) action;
+                        reductionStack = new StringBuilder(reductionStack).reverse().toString();
+                        reductionStack += reduceAction.getPos();
+                        reductionStack = new StringBuilder(reductionStack).reverse().toString();
+                        Production p = productionArrayList.get(reduceAction.getPos() - 1);
+                        stack += p.lhs;
+//                    word = word.substring(1);
+                        //find position for lhs of p
+                        Integer anotherPos = Integer.parseInt(String.valueOf(stack.charAt((stack.length() - 2) > 0 ? stack.length() - 2 : 0)));
+                        Character anotherChar = stack.charAt(stack.length() - 1);
+                        for (PairIndex pairIndex1 : indexTable.keySet()) {
+                            if (pairIndex1.getPosition().equals(anotherPos) && pairIndex1.getPair().getO2().equals(anotherChar.toString())) {
+                                Action action1 = indexTable.get(pairIndex1);
+                                stack += ((ShiftAction) action1).getPos();
+                                break;
+                            }
+                        }
+                    } else {
+                        change = true;
+                    }
+            } else {
+                while(lastPos != 1) {
+                    lastPos = Integer.parseInt(String.valueOf(stack.charAt(stack.length() - 1)));
+                    if(lastPos == 1) {change = true; break;}
+                    for (PairIndex pairIndex : indexTable.keySet()) {
+                        if (pairIndex.getPosition().equals(lastPos) && pairIndex.getPair().getO2().equals(crtChar.toString())) {
+                            action = indexTable.get(pairIndex);
+                            break;
+                        }
+                    }
+                    if(action instanceof ReduceAction) {
+                        int offset = ((ReduceAction) action).getRule().rhs.length;
+                        stack = stack.substring(0, stack.length() - 2*offset);
+                        ReduceAction reduceAction = (ReduceAction) action;
+                        reductionStack = new StringBuilder(reductionStack).reverse().toString();
+                        reductionStack += reduceAction.getPos();
+                        reductionStack = new StringBuilder(reductionStack).reverse().toString();
+                        Production p = productionArrayList.get(reduceAction.getPos() - 1);
+                        stack += p.lhs;
+//                    word = word.substring(1);
+                        //find position for lhs of p
+                        Integer anotherPos = Integer.parseInt(String.valueOf(stack.charAt((stack.length() - 2) > 0 ? stack.length() - 2 : 0)));
+                        Character anotherChar = stack.charAt(stack.length() - 1);
+                        for (PairIndex pairIndex1 : indexTable.keySet()) {
+                            if (pairIndex1.getPosition().equals(anotherPos) && pairIndex1.getPair().getO2().equals(anotherChar.toString())) {
+                                Action action1 = indexTable.get(pairIndex1);
+                                stack += ((ShiftAction) action1).getPos();
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
-        for (Pair<Set<Item>, String> key : table.keySet()) {
-            Set<Item> state = key.getO1();
-            if (!stateMap.containsKey(state)) {
-                stateMap.put(state, i++);
+
+        return reductionStack;
+
+    }
+
+    public Action findProperAction(Set<Item> set, Character c) {
+        Set<Pair<Set<Item>, String>> keySet = table.keySet();
+        for (Iterator<Pair<Set<Item>, String>> it = keySet.iterator(); it.hasNext(); ) {
+            Pair<Set<Item>, String> crtElem = it.next();
+            if (crtElem.getO1().equals(set) && crtElem.getO2().equals(c.toString())) {
+                return table.get(crtElem);
             }
         }
-        System.out.println(i);
-        System.out.println(table.size());
-        for (Map.Entry<Pair<Set<Item>, String>, Action> e : table.entrySet()) {
-            Pair<Set<Item>, String> p = e.getKey();
-            System.out.print(stateMap.get(p.getO1()) + " " + p.getO2() + " ");
-            Action a = e.getValue();
-            if (a instanceof ShiftAction) {
-                System.out.println("shift " +
-                        stateMap.get(((ShiftAction) a).nextState));
-            } else if (a instanceof ReduceAction) {
-                System.out.println("reduce " +
-                        ruleMap.get(((ReduceAction) a).rule));
-            } else throw new Error("Internal error: unknown action");
-        }
+        return null;
     }
 
     public static final void main(String[] args) {
 
-          Grammar grammar = initGrammar();
+        Grammar grammar = initGrammar();
 
 //        try {
 //            grammar = Util.readGrammar(new Scanner(System.in));
@@ -334,6 +357,8 @@ public class Jslr {
             jslr.showFirstFollowOutput();
             jslr.generateTable();
 //            jslr.generateOutput();
+            jslr.showIndexTableOutput();
+            System.out.println(jslr.parseInputWord("a+a*a$"));
         } catch (Error e) {
             System.err.println("Error performing SLR(1) construction: " + e);
             System.exit(1);
